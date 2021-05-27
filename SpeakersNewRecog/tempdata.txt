@@ -1,0 +1,146 @@
+﻿//*******************************************************************************************************************//
+public void NewPerson(string path, string person) // добавляет из файла модель в библиотеку всех моделей 
+        {
+            try
+            {
+                List<double> buffer = new List<double>(); // временный буфер
+
+                Model model = new Model(); // создание временной модели
+
+                model.Init(); // инициализация временной модели
+
+                mixtureModel.LoadModel(path, numberMixture, numberVariables); // загрузка модели диктора
+
+                // копирование коэффициентов
+                for (int i = 0; i < numberMixture; i++)
+                {
+                    model.Coefficients.Add(mixtureModel.Coefficients[i]);
+                    model.ExpectationCoefficients.Add(mixtureModel.ExpectationCoefficients[i]);
+                }
+
+                // копирование средних значений
+                for (int i = 0; i < numberVariables; i++)
+                {
+                    for (int j = 0; j < numberMixture; j++)
+                        buffer.Add(mixtureModel.Means[i][j]);
+
+                    model.Means.Add(buffer.ToArray());
+
+                    buffer.Clear();
+                }
+
+                // копирование ковариационных матриц
+                for (int i = 0; i < numberMixture; i++)
+                {
+                    for (int j = 0; j < numberVariables; j++)
+                        buffer.Add(mixtureModel.CovarianceMatrix[i][j]);
+
+                    model.CovarianceMatrix.Add(buffer.ToArray());
+
+                    buffer.Clear();
+
+                    for (int j = 0; j < numberVariables; j++)
+                        buffer.Add(mixtureModel.CovarianceInverse[i][j]);
+
+                    model.CovarianceInverse.Add(buffer.ToArray());
+
+                    buffer.Clear();
+                }
+
+                mixtureModels[person] = model; // добавление модели в библиотеку
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show(e.Message, "Ошибка!", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+//*******************************************************************************************************************//
+        private double Probability(double[][] variablesData) // возвращает вероятность (Чего? Пока не разобрался.) 
+        {
+            double prob; // вероятность
+
+            // инициализация
+            List<double> mixedProb = new List<double>();
+            List<double[]> normProb = new List<double[]>();
+
+            // выделение памяти вместо буфера
+            for (int i = 0; i < variablesData.Length; i++)
+                normProb.Add(new double[numberMixture]);
+
+            // вычисление вероятности
+            prob = InternalProbability(variablesData, mixtureModel, normProb, mixedProb);
+
+            return prob;
+        }
+//*******************************************************************************************************************//
+private double[][] GetFeaturesFromText() // для проверки алгоритма GMM реализовал получение признаков из другого файла другого проекта
+        {
+            double[][] features = new double[499][];
+            for (int i = 0; i < 499; i++)
+                features[i] = new double[12];
+
+            using (StreamReader sr = new StreamReader("D:\\Мои файлы\\VSProjects\\SpeakersNewRecog\\SpeakersNewRecog\\bin\\Debug\\MFCC\\0.mfcc"))
+            {
+                string[] line; // строка данных из файла
+
+                int i = 0;
+
+                while (i < 499)
+                {
+                    line = sr.ReadLine().Split(' '); // считывается строка данных компонент смеси
+
+                    // прасится и добавляется в массив коэффициентов
+                    for (int j = 0; j < 12; j++)
+                        features[i][j] = double.Parse(line[j]);
+
+                    i++;
+                }
+
+            }
+            return features;
+        }
+//*******************************************************************************************************************//
+
+ private int[] MfccVAD(WaveReader wav)
+        {
+            double[][] features = GetFeatures(wav);
+
+            double[] SArray = new double[features.Length];
+
+            int[] result = new int[features.Length];
+
+            int I = 3;
+
+            for (int num_frame = 0; num_frame < features.Length; num_frame++)
+            {
+                int featuresLength = features[num_frame].Length;
+
+                for (int i = 0; i < featuresLength; i++)
+                {
+                    double C = 0, R = 0;
+
+                    for (int r = -I; r <= I; r++)
+                    {
+                        if (r + num_frame < 0 || r + num_frame > features.Length - 1) continue;
+
+                        C += features[r + num_frame][i] * r;
+
+                        R += r * r;
+                    }
+
+                    SArray[num_frame] += C / R;
+                }
+
+                SArray[num_frame] /= featuresLength;
+            }
+
+
+            for (int num_frame = 1; num_frame < features.Length-1; num_frame++)
+            {
+                if (SArray[num_frame - 1] < SArray[num_frame] &&
+                    SArray[num_frame] > SArray[num_frame + 1])
+                    result[num_frame] = 1;
+            }
+
+            return result;
+        }
